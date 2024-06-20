@@ -136,8 +136,8 @@ const MyThreeJSComponent: React.FC = () => {
 
   return (
     <div>
-      <input type="file" onChange={handleFileChange} accept=".ply" />
-      <button onClick={handleColorChange}>Change Colors</button>
+        <input type="file" onChange={handleFileChange} accept=".ply" />
+        <button onClick={handleColorChange}>查看</button>
       <div ref={mountRef} style={{ width: '100vw', height: '100vh' }}></div>
     </div>
   )
