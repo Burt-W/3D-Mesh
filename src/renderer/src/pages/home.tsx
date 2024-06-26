@@ -13,6 +13,7 @@ const MyThreeJSComponent: React.FC = () => {
   const renderer = useRef<THREE.WebGLRenderer | null>(null)
   const mesh = useRef<THREE.Mesh | null>(null)
   const controls = useRef<OrbitControls | null>(null)
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
     if (!mountRef.current) return
@@ -20,7 +21,7 @@ const MyThreeJSComponent: React.FC = () => {
     // 初始化场景、相机和渲染器
     scene.current = new THREE.Scene()
     camera.current = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
-    camera.current.position.set(200, 200, 200)
+    camera.current.position.set(5, 5, 5)
 
     renderer.current = new THREE.WebGLRenderer({ antialias: true })
     renderer.current.setSize(window.innerWidth, window.innerHeight)
@@ -48,8 +49,6 @@ const MyThreeJSComponent: React.FC = () => {
     pointLight2.position.set(10, -10, -10)
     scene.current.add(pointLight2)
 
-    camera.current.position.z = 5
-
     const animate = () => {
       requestAnimationFrame(animate)
       if (controls.current) {
@@ -61,8 +60,20 @@ const MyThreeJSComponent: React.FC = () => {
     }
     animate()
 
+    // 窗口大小调整处理
+    const handleResize = () => {
+      if (camera.current && renderer.current) {
+        camera.current.aspect = window.innerWidth / window.innerHeight
+        camera.current.updateProjectionMatrix()
+        renderer.current.setSize(window.innerWidth, window.innerHeight)
+      }
+    }
+
+    window.addEventListener('resize', handleResize)
+
     // 清理
     return () => {
+      window.removeEventListener('resize', handleResize)
       if (mountRef.current) {
         while (mountRef.current.firstChild) {
           mountRef.current.removeChild(mountRef.current.firstChild)
@@ -110,6 +121,25 @@ const MyThreeJSComponent: React.FC = () => {
 
         mesh.current = newMesh
         scene.current.add(newMesh)
+
+        // 计算包围盒并调整相机位置
+        const boundingBox = new THREE.Box3().setFromObject(newMesh)
+        const center = boundingBox.getCenter(new THREE.Vector3())
+        const size = boundingBox.getSize(new THREE.Vector3())
+
+        const maxDim = Math.max(size.x, size.y, size.z)
+        const fov = camera.current!.fov * (Math.PI / 180)
+        let cameraZ = Math.abs((maxDim / 2) * Math.tan(fov * 2))
+
+        cameraZ *= 1.5 // 增加一些缓冲
+
+        camera.current!.position.set(center.x, center.y, cameraZ)
+        camera.current!.lookAt(center)
+
+        if (controls.current) {
+          controls.current.target.set(center.x, center.y, center.z)
+          controls.current.update()
+        }
       }
       reader.readAsArrayBuffer(selectedFile)
     }
@@ -120,6 +150,10 @@ const MyThreeJSComponent: React.FC = () => {
     if (file) {
       setSelectedFile(file)
     }
+  }
+
+  const handleButtonClick = () => {
+    fileInputRef.current?.click()
   }
 
   useEffect(() => {
@@ -157,15 +191,32 @@ const MyThreeJSComponent: React.FC = () => {
   }
 
   return (
-    <div>
-      <input type="file" onChange={handleFileChange} />
+    <div style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
+      <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} />
       <div
-        className={'header-state-title'}
         style={{
           position: 'absolute',
-          top: '50px',
-          right: 8,
-          transform: 'translateY(-50%)',
+          top: '10px',
+          left: '10px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '100px',
+          height: '40px',
+          backgroundColor: '#474747',
+          color: '#ffffff',
+          cursor: 'pointer',
+          zIndex: 10,
+        }}
+        onClick={handleButtonClick}
+      >
+        选择文件
+      </div>
+      <div
+        style={{
+          position: 'absolute',
+          top: '60px',
+          left: '10px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -173,6 +224,7 @@ const MyThreeJSComponent: React.FC = () => {
           height: '40px',
           backgroundColor: '#474747',
           cursor: 'pointer',
+          zIndex: 10,
         }}
         onClick={handleColorChange}
       >
