@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, ChangeEvent } from 'react'
 import * as THREE from 'three'
 import { PLYLoader } from 'three/examples/jsm/loaders/PLYLoader'
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
 const MyThreeJSComponent: React.FC = () => {
@@ -19,6 +20,8 @@ const MyThreeJSComponent: React.FC = () => {
     // 初始化场景、相机和渲染器
     scene.current = new THREE.Scene()
     camera.current = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000)
+    camera.current.position.set(200, 200, 200)
+
     renderer.current = new THREE.WebGLRenderer({ antialias: true })
     renderer.current.setSize(window.innerWidth, window.innerHeight)
     renderer.current.setClearColor(0x70777a) // 设置背景颜色为 #70777A
@@ -73,10 +76,30 @@ const MyThreeJSComponent: React.FC = () => {
       const reader = new FileReader()
       reader.onload = (event) => {
         const contents = event.target?.result
-        if (typeof contents === 'string') return // PLYLoader expects ArrayBuffer
+        if (!contents) {
+          console.error('Error reading file')
+          return
+        }
 
-        const loader = new PLYLoader()
-        const geometry = loader.parse(contents as ArrayBuffer)
+        const fileExtension = selectedFile.name.split('.').pop()?.toLowerCase()
+
+        let geometry: THREE.BufferGeometry
+        let loader: any
+        if (fileExtension === 'ply') {
+          if (typeof contents === 'string') {
+            console.error('PLYLoader expects ArrayBuffer')
+            return
+          }
+          loader = new PLYLoader()
+          geometry = loader.parse(contents as ArrayBuffer)
+        } else if (fileExtension === 'stl') {
+          loader = new STLLoader()
+          geometry = loader.parse(contents as ArrayBuffer)
+        } else {
+          console.error('Unsupported file format')
+          return
+        }
+
         geometry.computeVertexNormals()
         const material = new THREE.MeshStandardMaterial({ color: 0x5090c2 })
         const newMesh = new THREE.Mesh(geometry, material)
@@ -109,20 +132,10 @@ const MyThreeJSComponent: React.FC = () => {
         const x = geometry.attributes.position.getX(i)
         const y = geometry.attributes.position.getY(i)
         const z = geometry.attributes.position.getZ(i)
-        if (x > 2 && y > 1) {
-          color.setHSL(y / 10, 1.0, 0.5) // 根据强度设置颜色
-        } else if (x < 1 && x > 0 && y > 2) {
-          color.setHSL(x / 10, 1.0, 0.5) // 根据强度设置颜色
-        } else if (x < 0.2 && x > 0 && y > 1 && y < 2) {
-          color.setHSL(z / 10, 1.0, 0.5) // 根据强度设置颜色
-        } else if (z < 0.0005 && x > 0 && y < 1) {
-          color.setHSL(y / 10, 1.0, 0.5)
-        } else if (z > 0.0005 && x < -2 && y > 2) {
-          color.setHSL(y / 10, 1.0, 0.5)
-        } else if (z < 0.0005 && x < -1 && x > -2 && y > 1.5 && y < 2) {
-          color.setHSL(y / 10, 1.0, 0.5)
-        } else if (z > 0.0005 && x < -1 && x > -2 && y < 0.5) {
-          color.setHSL(y / 10, 1.0, 0.5)
+        if (x > 2 && y > 50 && y < 120 && z < 4 && z > -80) {
+          color.set('#ED7547') // 根据强度设置颜色
+        } else if (y < -65 && z < -100) {
+          color.set('#ED7547') // 根据强度设置颜色
         } else {
           color.set(0x5090c2) // 默认颜色
         }
@@ -145,7 +158,7 @@ const MyThreeJSComponent: React.FC = () => {
 
   return (
     <div>
-      <input type="file" onChange={handleFileChange} accept=".ply" />
+      <input type="file" onChange={handleFileChange} />
       <div
         className={'header-state-title'}
         style={{
