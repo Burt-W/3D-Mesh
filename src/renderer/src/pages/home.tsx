@@ -6,12 +6,12 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls'
 
 const MyThreeJSComponent: React.FC = () => {
   const mountRef = useRef<HTMLDivElement | null>(null)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([])
   const [colorChanged, setColorChanged] = useState<boolean>(false)
   const scene = useRef<THREE.Scene | null>(null)
   const camera = useRef<THREE.PerspectiveCamera | null>(null)
   const renderer = useRef<THREE.WebGLRenderer | null>(null)
-  const mesh = useRef<THREE.Mesh | null>(null)
+  const meshes = useRef<THREE.Mesh[]>([])
   const controls = useRef<OrbitControls | null>(null)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
@@ -83,73 +83,69 @@ const MyThreeJSComponent: React.FC = () => {
   }, [])
 
   useEffect(() => {
-    if (selectedFile && scene.current) {
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        const contents = event.target?.result
-        if (!contents) {
-          console.error('Error reading file')
-          return
-        }
-
-        const fileExtension = selectedFile.name.split('.').pop()?.toLowerCase()
-
-        let geometry: THREE.BufferGeometry
-        let loader: any
-        if (fileExtension === 'ply') {
-          if (typeof contents === 'string') {
-            console.error('PLYLoader expects ArrayBuffer')
+    if (selectedFiles.length > 0 && scene.current) {
+      selectedFiles.forEach((file) => {
+        const reader = new FileReader()
+        reader.onload = (event) => {
+          const contents = event.target?.result
+          if (!contents) {
+            console.error('Error reading file')
             return
           }
-          loader = new PLYLoader()
-          geometry = loader.parse(contents as ArrayBuffer)
-        } else if (fileExtension === 'stl') {
-          loader = new STLLoader()
-          geometry = loader.parse(contents as ArrayBuffer)
-        } else {
-          console.error('Unsupported file format')
-          return
+
+          const fileExtension = file.name.split('.').pop()?.toLowerCase()
+
+          let geometry: THREE.BufferGeometry
+          let loader: any
+          if (fileExtension === 'ply') {
+            if (typeof contents === 'string') {
+              console.error('PLYLoader expects ArrayBuffer')
+              return
+            }
+            loader = new PLYLoader()
+            geometry = loader.parse(contents as ArrayBuffer)
+          } else if (fileExtension === 'stl') {
+            loader = new STLLoader()
+            geometry = loader.parse(contents as ArrayBuffer)
+          } else {
+            console.error('Unsupported file format')
+            return
+          }
+
+          geometry.computeVertexNormals()
+          const material = new THREE.MeshStandardMaterial({ color: 0xcecace }) // 默认颜色
+          const newMesh = new THREE.Mesh(geometry, material)
+          newMesh.name = file.name 
+          scene.current?.add(newMesh)
+          meshes.current.push(newMesh)
+        
+          // 计算包围盒并调整相机位置
+          const boundingBox = new THREE.Box3().setFromObject(newMesh)
+          const center = boundingBox.getCenter(new THREE.Vector3())
+          const size = boundingBox.getSize(new THREE.Vector3())
+
+          const maxDim = Math.max(size.x, size.y, size.z)
+          const fov = camera.current!.fov * (Math.PI / 180)
+          let cameraZ = Math.abs((maxDim / 2) * Math.tan(fov * 2))
+
+          cameraZ *= 1.5 // 增加一些缓冲
+
+          camera.current!.position.set(center.x, center.y, cameraZ)
+          camera.current!.lookAt(center)
+
+          if (controls.current) {
+            controls.current.target.set(center.x, center.y, center.z)
+            controls.current.update()
+          }
         }
-
-        geometry.computeVertexNormals()
-        const material = new THREE.MeshStandardMaterial({ color: 0x5090c2 })
-        const newMesh = new THREE.Mesh(geometry, material)
-
-        if (mesh.current) {
-          scene.current?.remove(mesh.current)
-        }
-
-        mesh.current = newMesh
-        scene.current.add(newMesh)
-
-        // 计算包围盒并调整相机位置
-        const boundingBox = new THREE.Box3().setFromObject(newMesh)
-        const center = boundingBox.getCenter(new THREE.Vector3())
-        const size = boundingBox.getSize(new THREE.Vector3())
-
-        const maxDim = Math.max(size.x, size.y, size.z)
-        const fov = camera.current!.fov * (Math.PI / 180)
-        let cameraZ = Math.abs((maxDim / 2) * Math.tan(fov * 2))
-
-        cameraZ *= 1.5 // 增加一些缓冲
-
-        camera.current!.position.set(center.x, center.y, cameraZ)
-        camera.current!.lookAt(center)
-
-        if (controls.current) {
-          controls.current.target.set(center.x, center.y, center.z)
-          controls.current.update()
-        }
-      }
-      reader.readAsArrayBuffer(selectedFile)
+        reader.readAsArrayBuffer(file)
+      })
     }
-  }, [selectedFile])
+  }, [selectedFiles])
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      setSelectedFile(file)
-    }
+    const files = Array.from(event.target.files || [])
+    setSelectedFiles(files)
   }
 
   const handleButtonClick = () => {
@@ -157,42 +153,36 @@ const MyThreeJSComponent: React.FC = () => {
   }
 
   useEffect(() => {
-    if (!mesh.current) return
-    const geometry = mesh.current.geometry
-    const colors: any[] = []
-    const color = new THREE.Color()
-    if (colorChanged) {
+    meshes.current.forEach((mesh) => {
+      const geometry = mesh.geometry
+      const colors: any[] = []
+      const color = new THREE.Color()
+
+      const fileName = selectedFiles.find((file) => file.name.includes('241408扫描.stl'))?.name
+      console.log(selectedFiles, mesh, fileName)
       for (let i = 0; i < geometry.attributes.position.count; i++) {
-        const x = geometry.attributes.position.getX(i)
-        const y = geometry.attributes.position.getY(i)
-        const z = geometry.attributes.position.getZ(i)
-        if (x > 2 && y > 50 && y < 120 && z < 4 && z > -80) {
-          color.set('#ED7547') // 根据强度设置颜色
-        } else if (y < -65 && z < -100) {
-          color.set('#ED7547') // 根据强度设置颜色
+        if (colorChanged && mesh.name === fileName) {
+          color.set('#8EFB4D')
         } else {
-          color.set(0x5090c2) // 默认颜色
+          color.set('#CECACE')
         }
         colors.push(color.r, color.g, color.b)
       }
-    } else {
-      for (let i = 0; i < geometry.attributes.position.count; i++) {
-        color.set(0x5090c2) // 默认颜色
-        colors.push(color.r, color.g, color.b)
-      }
-    }
-    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
-    const material = new THREE.MeshStandardMaterial({ vertexColors: true })
-    mesh.current.material = material
-  }, [colorChanged])
+
+      geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3))
+      const material = new THREE.MeshStandardMaterial({ vertexColors: true })
+      mesh.material = material
+    })
+  }, [colorChanged, selectedFiles])
 
   const handleColorChange = () => {
+    console.log(colorChanged)
     setColorChanged(!colorChanged)
   }
 
   return (
     <div style={{ width: '100vw', height: '100vh', overflow: 'hidden' }}>
-      <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} />
+      <input type="file" ref={fileInputRef} onChange={handleFileChange} style={{ display: 'none' }} multiple />
       <div
         style={{
           position: 'absolute',
